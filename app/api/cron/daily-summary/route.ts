@@ -18,10 +18,10 @@ export async function GET() {
     // 1. Get today's start and end boundaries
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Start of today
-    
+
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1); // Start of tomorrow
-    
+
     // 2. Fetch today's transactions
     const { data: transactions, error: txError } = await supabase
       .from('transactions')
@@ -55,17 +55,68 @@ export async function GET() {
       .eq('key', 'total_balance')
       .single();
 
-    if (balError && balError.code !== 'PGRST116') // Not found error
-    {
-       console.error('Error fetching balance:', balError);
+    if (balError && balError.code !== 'PGRST116') {
+      console.error('Error fetching balance:', balError);
     }
-    
     const totalBalance = balanceData?.value ? Number(balanceData.value) : 0;
 
-    // 5. Create a dynamic string based on the data
-    const summaryText = `📊 สรุปยอดบัญชีกองกลางประจำวัน\nวันที่: ${today.toLocaleDateString('th-TH')}\n\n🟢 รายรับวันนี้: +${todayIncome} บาท\n🔴 รายจ่ายวันนี้: -${todayExpense} บาท\n\n💰 ยอดคงเหลือกองกลางปัจจุบัน: ${totalBalance} บาท\n\n📌 ดูรายละเอียดเพิ่มเติมได้ที่ระบบจัดการ Money Hotline`;
+    // 5. Fetch monthly fee
+    const { data: feeData } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'monthly_fee')
+      .single();
+    const monthlyFee = feeData?.value ? Number(feeData.value) : 500;
 
-    // 6. Send the message to the LINE Group
+    // 6. Fetch members and their debts
+    const { data: members } = await supabase.from('members').select('*');
+    const { data: otherDebts } = await supabase.from('other_debts').select('*').eq('is_paid', false);
+    const { data: unpaidMonths } = await supabase.from('monthly_payments').select('*').eq('is_paid', false);
+
+    let totalBorrowed = 0;
+    const memberDebts: string[] = [];
+
+    if (members) {
+      members.forEach((member) => {
+        let hasDebt = false;
+        const memberRows: string[] = [];
+        
+        const b = Number(member.borrowed) || 0;
+        if (b > 0) {
+          totalBorrowed += b;
+          memberRows.push(`- ยืมเงิน: ${b.toLocaleString()} ฿`);
+          hasDebt = true;
+        }
+
+        const memberUnpaidMonths = unpaidMonths?.filter(m => m.member_id === member.id) || [];
+        if (memberUnpaidMonths.length > 0) {
+          const monthDebt = memberUnpaidMonths.length * monthlyFee;
+          memberRows.push(`- ค่าส่วนกลางค้างจ่าย ${memberUnpaidMonths.length} เดือน (${monthDebt.toLocaleString()} ฿)`);
+          hasDebt = true;
+        }
+
+        const memberOtherDebts = otherDebts?.filter(d => d.member_id === member.id) || [];
+        if (memberOtherDebts.length > 0) {
+          const mOtherSum = memberOtherDebts.reduce((sum, d) => sum + Number(d.amount), 0);
+          const descriptions = memberOtherDebts.map(d => d.description).join(', ');
+          memberRows.push(`- หนี้อื่นๆ (${descriptions}): ${mOtherSum.toLocaleString()} ฿`);
+          hasDebt = true;
+        }
+
+        if (hasDebt) {
+          memberDebts.push(`👤 ${member.name}:\n  ${memberRows.join('\n  ')}`);
+        }
+      });
+    }
+
+    const debtSummaryText = memberDebts.length > 0 
+      ? `\n\n📌 รายการค้างชำระ:\n${memberDebts.join('\n\n')}`
+      : `\n\n📌 รายการค้างชำระ:\n✅ ทุกคนจ่ายครบหมดแล้ว!`;
+
+    // 7. Create a dynamic string based on the data
+    const summaryText = `📊 สรุปยอดบัญชีกองกลางประจำวัน\n📅 วันที่: ${today.toLocaleDateString('th-TH')}\n\n🟢 รายรับวันนี้: +${todayIncome.toLocaleString()} ฿\n🔴 รายจ่ายวันนี้: -${todayExpense.toLocaleString()} ฿\n\n💰 ยอดคงเหลือกองกลาง: ${totalBalance.toLocaleString()} ฿\n💸 ยอดเงินถูกยืมรวม: ${totalBorrowed.toLocaleString()} ฿${debtSummaryText}\n\n🔗 ดูรายละเอียดเพิ่มเติม: https://money-hotline.vercel.app/`;
+
+    // 8. Send the message to the LINE Group
     await client.pushMessage({
       to: groupId,
       messages: [
