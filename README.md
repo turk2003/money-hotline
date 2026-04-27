@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Money Hotline
 
-## Getting Started
+ระบบจัดการกองกลางทีมด้วย Next.js + Supabase พร้อม LINE webhook และ cron summary
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router)
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- Supabase
+- LINE Messaging API
+
+## Project Structure
+
+```text
+app/
+	api/
+		cron/daily-summary/route.ts     # สรุปรายวันและส่งเข้า LINE
+		webhook/line/route.ts           # รับ webhook และตรวจลายเซ็น LINE
+	globals.css
+	layout.tsx
+	page.tsx                          # หน้า dashboard หลัก
+
+features/
+	home/
+		constants.ts                    # ค่าคงที่ของหน้าหลัก
+		types.ts                        # Type ของ dashboard
+		utils.ts                        # ตัวช่วยคำนวณทางการเงิน
+
+lib/
+	supabase/
+		client.ts                       # สร้าง Supabase client
+	supabase.ts                       # compatibility export
+
+database_schema.sql                 # โครงสร้างฐานข้อมูล
+```
+
+## Scripts
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build
+npm run start
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+ใส่ค่าใน `.env.local`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_ADMIN_PIN=
 
-## Learn More
+LINE_CHANNEL_SECRET=
+LINE_CHANNEL_ACCESS_TOKEN=
+LINE_GROUP_ID=
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- หน้า dashboard ใช้ client component (`app/page.tsx`) สำหรับ interaction แบบ realtime
+- route ใน `app/api/` ทำงานฝั่ง server
+- ตั้งค่า `LINE_GROUP_ID` เพื่อเปิดใช้ daily summary cron
